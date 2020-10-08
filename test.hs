@@ -2,6 +2,8 @@
 import Proj2
 
 import Data.List
+import Control.Monad
+import Control.Applicative
 
 help :: [Char] -> (Char, Char)
 help [a,b] = (a,b)
@@ -24,6 +26,11 @@ data Card = Card Suit Rank deriving Show
 -- maybeP (Just p) = p
 -- maybeP Nothing = pitch
 
+-- getZipList $ (+) <$> ZipList [1,2,3] <*> ZipList [100,10,20]
+-- evaluates to [101, 12, 23]
+
+-- (fmap (*2)) <$> [Just 1, Nothing, Just 3]
+-- evaluates to [Just 2, Nothing, Just 6]
 
 getPitch :: IO (Maybe Pitch)
 getPitch = do
@@ -43,6 +50,12 @@ intersect' a b = a \\ (a \\ b)
 sameInt :: Int -> Int -> Bool
 sameInt = (==)
 
+mkPitches :: [String] -> [Maybe Pitch]
+mkPitches xs = fmap toPitch xs
+
+-- testFeedback :: [String] -> [String] -> (Int, Int, Int)
+-- testFeedback _ _ = (0,0,0)
+
 main :: IO ()
 main = do
     -- putStrLn "Hello World. Pitch?"
@@ -50,7 +63,7 @@ main = do
     -- case a of
     --     Just _ -> putStrLn "good pitch"
     --     Nothing -> putStrLn "bad pitch"
-    let res = correctPitches [1,2,3] [5,0,4]
+    let res = [1,23]
     print $ res
 
 
