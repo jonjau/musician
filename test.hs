@@ -28,6 +28,12 @@ data Card = Card Suit Rank deriving Show
 
 -- getZipList $ (+) <$> ZipList [1,2,3] <*> ZipList [100,10,20]
 -- evaluates to [101, 12, 23]
+-- equivalently:
+-- getZipList $ fmap (+) (ZipList [1,2,3]) <*> (ZipList [100,10,20])
+-- FIXME: how does one make this work with ZipList [Just 1, Just 2, Just 3] ?
+
+--
+--
 
 -- (fmap (*2)) <$> [Just 1, Nothing, Just 3]
 -- evaluates to [Just 2, Nothing, Just 6]
@@ -53,6 +59,13 @@ sameInt = (==)
 mkPitches :: [String] -> [Maybe Pitch]
 mkPitches xs = fmap toPitch xs
 
+powerset :: Eq a => [a] -> [[a]]
+powerset [] = [[]]
+powerset s@(x:_) =
+    let s' = s \\ [x]
+        p  = powerset(s')
+    in  p `union` [s `union` [x] | s <- p]
+
 -- testFeedback :: [String] -> [String] -> (Int, Int, Int)
 -- testFeedback _ _ = (0,0,0)
 
@@ -63,7 +76,12 @@ main = do
     -- case a of
     --     Just _ -> putStrLn "good pitch"
     --     Nothing -> putStrLn "bad pitch"
-    let res = [1,23]
+    let res = 3
     print $ res
 
-
+-- a do-block that is not for IO !
+testdo :: [Maybe Integer]
+testdo = do
+    f <- [(*2), (+2)]
+    m <- [Just 1, Just 2, Nothing]
+    pure (f <$> m)
