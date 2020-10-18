@@ -1,11 +1,13 @@
+-- %2020-10-18
+-- Tests and experiments for Project 2
 
 import Proj2
-
+    ( feedback, initialGuess, nextGuess, toPitch, GameState, Pitch )
 import Data.List
-import Control.Monad
-import Control.Applicative
-import Data.Maybe
-import Data.Ord
+    ( minimumBy, (\\), delete, genericLength, intersect, union )
+import Control.Applicative ( ZipList(ZipList, getZipList) )
+import Data.Maybe ( fromJust )
+import Data.Ord ( comparing )
 
 help :: [Char] -> (Char, Char)
 help [a,b] = (a,b)
@@ -20,6 +22,11 @@ data Rank
 
 data Card = Card Suit Rank deriving Show
 
+type Person = String
+
+fun :: Person -> String
+fun p = p ++ " the person"
+
 -- https://blog.ramdoot.in/monadic-do-block-yet-again-a98cf0237b25
 -- https://en.wikibooks.org/wiki/Haskell/Monad_transformers
 
@@ -31,8 +38,7 @@ data Card = Card Suit Rank deriving Show
 -- evaluates to [101, 12, 23]
 -- equivalently:
 -- getZipList $ fmap (+) (ZipList [1,2,3]) <*> (ZipList [100,10,20])
--- FIXME: how does one make this work with ZipList [Just 1, Just 2, Just 3] ?
-
+-- how does one make this work with ZipList [Just 1, Just 2, Just 3] ?
 
 -- (fmap (*2)) <$> [Just 1, Nothing, Just 3]
 -- evaluates to [Just 2, Nothing, Just 6]
@@ -91,22 +97,9 @@ choose 0 _  = [[]]
 choose _ [] = []
 choose k (x:xs) = (map (x:) (choose (k-1) xs)) ++ choose k xs
 
--- | Guess the given target, counting and showing the guesses.
-guessTest :: [Pitch] -> IO ()
-guessTest target = do
-    let (guess, other) = initialGuess
-    loop target guess other 1
-
--- guessTest' :: [[Pitch]] -> [Pitch] -> GameState -> Int -> Int
--- guessTest' [] guess state nGuesses = nGuesses
--- guessTest' (t:ts) guess state nGuesses =
---     if 
-
 guessTest' :: ([Pitch], GameState) -> [Pitch] -> Int
 guessTest' (guess, state) target =
-    mguess' guess state target 1
-
--- Filtering impossible guesses + picking best guess:
+    mguess guess state target 1
 
 mguess :: [Pitch] -> GameState -> [Pitch] -> Int -> Int
 mguess guess state target nGuesses =
@@ -115,28 +108,6 @@ mguess guess state target nGuesses =
         let score = feedback target guess
             (guess', state')= nextGuess (guess, state) score
         in mguess guess' state' target (nGuesses + 1)
-
-mguess' :: [Pitch] -> GameState -> [Pitch] -> Int -> Int
-mguess' guess state target nGuesses =
-    if target == guess then nGuesses
-    else
-        let score = feedback target guess
-            (guess', state')= nextGuess' (guess, state) score
-        in mguess' guess' state' target (nGuesses + 1)
-
--- | Given a target and guess and a guess number, continue guessing
--- until the right target is guessed.
-loop :: [Pitch] -> [Pitch] -> GameState -> Int -> IO ()
-loop target guess other guesses = do
-  putStrLn $ "Your guess #" ++ show guesses ++ ":  " ++ show guess
-  let answer = feedback target guess
-  putStrLn $ "    My answer:  " ++ show answer
-  if answer == (3, 0, 0)
-    then do
-      putStrLn $ "You got it in " ++ show guesses ++ " guesses!"
-    else do
-      let (guess', other') = nextGuess (guess, other) answer
-      loop target guess' other' (guesses + 1)
 
 -- | Parse a string containing a number of space-separated pitches to produce
 -- a list of pitches.  Error if any of the pitches can't be parsed.
@@ -148,7 +119,8 @@ averageNumberOfGuesses initialGuess targets =
     let 
         allNumberOfGuesses = fmap (guessTest' initialGuess) targets
         avgNumberOfGuesses =
-            realToFrac (sum allNumberOfGuesses) / (genericLength allNumberOfGuesses)
+            realToFrac
+                (sum allNumberOfGuesses) /(genericLength allNumberOfGuesses)
     in avgNumberOfGuesses
 
 mysplit :: [[Pitch]] -> [([Pitch], [[Pitch]])]
@@ -156,12 +128,11 @@ mysplit [] = []
 mysplit l@(p:ps) = (p, delete p l) : mysplit ps
 
 
--- | Prompt for a target and use guessTest to try to guess it.
 main :: IO ()
 main = do
   -- putStr "Target chord (3 pitches separated by spaces): "
-  let allTargets = allPitches
-  let allInitialGuesses = fmap (\t -> (t, allPitches \\ [t])) allPitches
+  let allTargets = allChords
+  let allInitialGuesses = fmap (\t -> (t, allChords \\ [t])) allChords
   let initials = [initialGuess]
   let ys = fmap (flip averageNumberOfGuesses allTargets) initials
   let anss = zip initials ys
@@ -175,6 +146,70 @@ main = do
  --   let allNGuesses = fmap (guessTest' initialGuess) allTargets
 --   let avgNGuesses = realToFrac (sum allNGuesses) / (genericLength allNGuesses)
 
+-- | just make guesses that are consistent, this one isn't very clever
+--  average: 4.8240601503759395
+nextGuess' :: ([Pitch], GameState) -> (Int, Int, Int) -> ([Pitch], GameState)
+nextGuess' (guess, state) score =
+    let state' = (filter (\t -> feedback t guess == score) state) \\ [guess]
+        guess' = head state'
+    in (guess', state')
+
+targets :: [[Pitch]]
+targets = [
+    toChord "A1 B2 A3",
+    toChord "A1 B2 C3",
+    toChord "A1 B1 C1",
+    toChord "A3 B2 C1",
+    toChord "A1 B2 C3",
+    toChord "A1 F1 F2"]
+
+guesses :: [[Pitch]]
+guesses = [
+    toChord "A1 A2 B1",
+    toChord "A1 A2 A3",
+    toChord "A2 D1 E1",
+    toChord "C3 A2 B1",
+    toChord "A1 B2 C3",
+    toChord "G3 F1 D1"]
+
+-- | expected: [(1,2,1),(1,0,2),(0,1,2),(0,3,3),(3,0,0),(1,0,1)]
+testFeedback :: [(Int, Int, Int)]
+testFeedback =
+        getZipList $ fmap feedback (ZipList targets) <*> (ZipList guesses)
+
+-- | `combinations` returns a list of lists: each list is combination of
+--   elements in the input list; each combination is of the given length k.
+combinations :: (Eq t, Num t) => t -> [a] -> [[a]]
+combinations 0 _  = [[]]
+combinations _ [] = []
+combinations k (x:xs) =(map (x:) (combinations (k-1) xs)) ++ combinations k xs
+
+allChords :: [[Pitch]]
+allChords = combinations 3 [ (fromJust . toPitch) [x,y]
+                           | x <- ['A'..'G']
+                           , y <-['1'..'3']]
+
+-- -- expect (1/10) * 1 + (3/10) * 3 + (6/10) * 6 = 4.6
+-- testERT :: Fractional a => a
+-- testERT =
+--     let state = testChords
+--         guess = toChord "A1 B2 C3"
+--     in expectedRemainingCandidates state guess
+
+testChords :: GameState
+testChords = [ toChord "A1 B2 C3" -- (3,0,0) correct
+
+             , toChord "A1 D2 E3" -- (1,0,2)
+             , toChord "A1 E2 F3"
+             , toChord "A1 F2 G3"
+
+             , toChord "A1 B2 A3" -- (2,0,1)
+             , toChord "A1 B2 B3"
+             , toChord "A1 B2 D3"
+             , toChord "A1 B2 E3"
+             , toChord "A1 B2 F3"
+             , toChord "A1 B2 G3"
+             ]
 
 -- With A1 B2 C3:
 --
@@ -251,3 +286,10 @@ main = do
 -- real    0m55.742s
 -- user    0m55.459s
 -- sys     0m0.250s
+
+-- [A2,B1,C1]
+-- 4.208270676691729
+
+-- real    0m49.519s
+-- user    0m49.350s
+-- sys     0m0.140s

@@ -1,45 +1,66 @@
 --  Author:   Jonathan Jauhari 1038331 <jjauhari@student.unimelb.edu.au>
---  Purpose:  Implements the guessing part of the logical guessing game
---            "Musician".
+--  Purpose:  Implements both the guessing and answering parts of the
+--            logical guessing game "Musician".
 -- 
---  COMP30020 Project 1, S2 2020.
--- FIXME: style guide?
+--  COMP30020 Project 2, S2 2020.
+--
+-- Musician is a game where a composer selects a chord, and a performer
+-- repeatedly tries to guess it. A chord is a list of three unique 'pitches',
+-- and a pitch comprises a note ('A' to 'G'), and an octave ('1' to '3').
+-- The composer gives feedback (the number of correct pitches, correct notes,
+-- and correct octaves) to the performer after every incorrect guess, which the
+-- performer can use to narrow down guesses.
+--
+-- To implement both the role of the composer and the performer, this Haskell
+-- program defines the following functions:
+-- 
+-- + toPitch      : parses a String to a Maybe Pitch
+-- + feedback     : returns feedback for a target chord and a guessed chord
+-- + initialGuess : gives the initial chord to guess and an initial game state
+-- + nextGuess    : given the previous guess and state, return the
+--                  next guess and state.
+--
+-- The strategy used to choose the next guess is based on filtering out
+-- guesses that are inconsistent with previous guesses, and then choosing the
+-- guess that will reduce the number of possibilities by the largest amount.
+-- The game state is used to keep track of the remaining possible guesses.
 
-
--- module Proj2 (Pitch, toPitch, feedback,
---               GameState, initialGuess, nextGuess) where
-
--- FIXME: I added some exports
 module Proj2 (Pitch, toPitch, feedback,
-              GameState, initialGuess, nextGuess, allPitches, nextGuess',
-              testFeedback) where
+              GameState, initialGuess, nextGuess) where
 
 import Data.List
-import Control.Applicative
 import Data.Ord
 
--- type Feedback = (Int, Int, Int)
-type GameState = [[Pitch]]
--- type GameState = (([Pitch], (Int, Int, Int)), [[Pitch]])
+-------------------------------------------------------------------------------
 
+-- | A `Chord` is a list of (three) unique `Pitch`s
+type Chord = [Pitch]
+
+-- | A `GameState` is a list of `Chord`'s that are possible targets (answers)
+type GameState = [Chord]
+
+-- | A `Feedback` score is a 3-tuple of `Int`s, in order they represent:
+-- the number of correct pitches, correct notes, and correct octaves.
+type Feedback = (Int, Int, Int)
+
+-- | A `Pitch` comprises a musical note, one of A, B, C, D, E, F, or G,
+-- and an octave, one of 1, 2, or 3. Notes and octaves are stored as `Char`s.
 data Pitch = Pitch Char Char deriving Eq
 
--- FIXME: delete maybe?
-type Chord = [Pitch]
-type Score = (Int, Int, Int)
-
+-- | A `Pitch` is shown as a string of two characters: its note and octave
 instance Show Pitch where
-    show = pitchToString
+    show (Pitch note octave) = [note, octave]
 
-pitchToString :: Pitch -> String
-pitchToString (Pitch note octave) = [note, octave]
-
+-- | `note` returns a `Pitch`s note
 note :: Pitch -> Char
 note (Pitch note _) = note
 
+-- | `octave` returns a `Pitch`s octave
 octave :: Pitch -> Char
 octave (Pitch _ octave) = octave
 
+-- | `toPitch` gives `Just` the `Pitch` named by the given string,
+-- or `Nothing` if the string is not a valid pitch name.
 toPitch :: String -> Maybe Pitch
 toPitch [note, octave] =
     if note `elem` ['A'..'G'] && octave `elem` ['1'..'3'] then
@@ -48,105 +69,107 @@ toPitch [note, octave] =
         Nothing
 toPitch _ = Nothing
 
+-------------------------------------------------------------------------------
 
+-- | `sameNote` checks whether the two given `Pitch`'s have the same note
+sameNote :: Pitch -> Pitch -> Bool
+sameNote p1 p2 = note p1 == note p2
+
+-- | `sameOctave` checks whether the two given `Pitch`'s have the same octave
+sameOctave:: Pitch -> Pitch -> Bool
+sameOctave p1 p2 = octave p1 == octave p2
+
+-- | `intersectBy\'` returns the intersection between two arrays As and Bs:
+-- a list that contains all the elements in As for which there is a
+-- corresponding matching element in Bs, allowing duplicates.
+-- e.g. 2 elements in As matching 2 elements in Bs results in a
+--      list containing the 2 elements in A.
+--
+-- Whether an element in As matches an element in Bs is decided by the
+-- input predicate. If two elements in As match an element in Bs, the one
+-- that occurs later in As is preferred.
 intersectBy' :: (a -> a -> Bool) -> [a] -> [a] -> [a]
-intersectBy' eq as bs =
-    let minus = deleteFirstsBy eq
+intersectBy' predicate as bs =
+    let minus = deleteFirstsBy predicate
     in  as `minus` (as `minus` bs)
 
-feedback :: [Pitch] -> [Pitch] -> (Int, Int, Int)
+-- | `feedback` returns the `Feedback` score, a triple of the number of
+-- correct pitches, notes and octaves, for a given guess and target
+-- (both assumed to contain only unique `Pitch`s).
+--
+-- In counting correct notes and octaves, multiple occurrences in the guess
+-- are only counted as correct if they also appear repeatedly in the target.
+-- Correct pitches are not also counted as correct notes and octaves.
+feedback :: Chord -> Chord -> Feedback
 feedback target guess =
-    let commonPitches = target `intersect` guess -- works since pitches unique
+    let commonPitches = target `intersect` guess
         pitchScore = length commonPitches
-        sameNote = \t g -> note t == note g
-        sameOctave = \t g -> octave t == octave g
         target' = target \\ commonPitches
         guess' = guess \\ commonPitches
-        commonNotes = (intersectBy' sameNote) target' guess'
-        commonOctaves = (intersectBy' sameOctave) target' guess'
-        noteScore = length commonNotes
-        octaveScore = length commonOctaves
+        noteScore = length $ (intersectBy' sameNote) target' guess'
+        octaveScore = length $ (intersectBy' sameOctave) target' guess'
     in (pitchScore, noteScore, octaveScore)
 
--- exclude this guess in initialGuess or nextGuess?
--- FIXME: document how initial guess was obtained
-initialGuess :: ([Pitch], GameState)
+-------------------------------------------------------------------------------
+
+-- | `initialGuess` returns the first `Chord` to guess and the initial
+-- `GameState`. The initial guess is chosen to eliminate the as many possible
+-- targets early on.
+--
+-- The `Chord` [A2, B1, C1] was one of the initial `Chord`s that resulted in a
+-- very low (around 4.21 in tests) number of guesses to guess the correct
+-- `Chord`, on average over all 1330 possible target `Chord`s.
+initialGuess :: (Chord, GameState)
 initialGuess =
-    let pitches = [Pitch note octave | note <- ['A'..'G'], octave <-['1'..'3']]
+    let allPitches = [ Pitch note octave
+                     | note <- ['A'..'G']
+                     , octave <-['1'..'3']]
         initial = [(Pitch 'A' '2'), (Pitch 'B' '1'), (Pitch 'C' '1')]
-    in (initial, choose 3 pitches)
+        state = combinations 3 allPitches
+    in (initial, state)
 
--- nextGuess :: ([Pitch], GameState) -> (Int, Int, Int) -> ([Pitch], GameState)
--- nextGuess _ _ = (
---     [(Pitch 'A' '1'), (Pitch 'B' '2'), (Pitch 'C' '3')],
---     [[(Pitch 'A' '1'), (Pitch 'B' '2'), (Pitch 'C' '3')]])
-
--- | make guesses that are consistent
--- 4.8240601503759395
-nextGuess :: ([Pitch], GameState) -> (Int, Int, Int) -> ([Pitch], GameState)
-nextGuess (guess, state) score =
-    let state' = (filter (\t -> feedback t guess == score) state) \\ [guess]
-        guess' = head state'
+-- | `nextGuess` returns the next `Chord` to be guessed and the corresponding
+-- `GameState`, given the previous guess and game state.
+--
+-- Inconsistent guesses are filtered out (this includes the previous guess,
+-- since it must have been incorrect), and from the remaining possibilities,
+-- the one that results in the fewest expected remaining targets is picked.
+nextGuess :: (Chord, GameState) -> Feedback -> (Chord, GameState)
+nextGuess (guess, state) score = 
+    let state' = (filter (\target -> feedback target guess == score) state)
+        guess' = pickBest state'
     in (guess', state')
 
-nextGuess' :: ([Pitch], GameState) -> (Int, Int, Int) -> ([Pitch], GameState)
-nextGuess' (guess, state) score = 
-    let state' = (filter (\t -> feedback t guess == score) state) \\ [guess]
-        guess' = pick state'
-    in (guess', state')
+-- | `pickBest` returns the `Chord` that results in the fewest expected
+-- remaining possibilities if guessed, given the remaining possible targets
+-- in `GameState`.
+pickBest :: GameState -> Chord
+pickBest state =
+    minimumBy (comparing (expectedRemainingCandidates state)) state
 
--- expectedRemainingTargets :: GameState -> [Pitch] -> [Int]
-expectedRemainingTargets :: Fractional a => [[Pitch]] -> [Pitch] -> a
-expectedRemainingTargets state guess =
+-- | `expectedRemainingCandidates`  returns the expected number of remaining
+-- possible condidates if the input `Chord` guess were chosen from among the
+-- other remaining possibilities in the given game state.
+--
+-- This is computed by grouping guesses that would result in the same
+-- feedback score, assuming the given guess is the actual target, then
+-- summing up the products of length and relative frequency (probability)
+-- of each group.
+expectedRemainingCandidates ::  GameState -> Chord -> Double
+expectedRemainingCandidates state guess =
     let 
-        state' = delete guess state
-        nPossibilities = length state'
-        possibleFeedbacks = fmap (flip feedback guess) state'
-        lengths = fmap length (group (sort possibleFeedbacks))
-        comp = \length ->
-            (fromIntegral length) * (
-                (fromIntegral length) / (fromIntegral nPossibilities))
+        nPossibilities = length state
+        possibleFeedbacks = fmap (flip feedback guess) state
+        lengths = fmap length ((group . sort) possibleFeedbacks)
+        comp = \len ->
+            fromIntegral len * (fromIntegral len / fromIntegral nPossibilities)
     in  sum (fmap comp lengths)
 
-pick :: GameState -> [Pitch]
-pick state = minimumBy (comparing (expectedRemainingTargets state)) state
+-- | `combinations` returns a list of lists: each list is combination of
+-- elements in the input list; each combination is of the given length k.
+combinations :: Int -> [a] -> [[a]]
+combinations 0 _  = [[]]
+combinations _ [] = []
+combinations k (x:xs) =(map (x:) (combinations (k-1) xs)) ++ combinations k xs
 
-
-targets :: [[Pitch]]
-targets = [
-    [(Pitch 'A' '1'), (Pitch 'B' '2'), (Pitch 'A' '3')],
-    [(Pitch 'A' '1'), (Pitch 'B' '2'), (Pitch 'C' '3')],
-    [(Pitch 'A' '1'), (Pitch 'B' '1'), (Pitch 'C' '1')],
-    [(Pitch 'A' '3'), (Pitch 'B' '2'), (Pitch 'C' '1')],
-    [(Pitch 'A' '1'), (Pitch 'B' '2'), (Pitch 'C' '3')],
-    [(Pitch 'A' '1'), (Pitch 'F' '1'), (Pitch 'F' '2')]]
-
-guesses :: [[Pitch]]
-guesses = [
-    [(Pitch 'A' '1'), (Pitch 'A' '2'), (Pitch 'B' '1')],
-    [(Pitch 'A' '1'), (Pitch 'A' '2'), (Pitch 'A' '3')],
-    [(Pitch 'A' '2'), (Pitch 'D' '1'), (Pitch 'E' '1')],
-    [(Pitch 'C' '3'), (Pitch 'A' '2'), (Pitch 'B' '1')],
-    [(Pitch 'A' '1'), (Pitch 'B' '2'), (Pitch 'C' '3')],
-    [(Pitch 'G' '3'), (Pitch 'F' '1'), (Pitch 'D' '1')]]
-
--- [(1,2,1),(1,0,2),(0,1,2),(0,3,3),(3,0,0),(1,0,1)]
-testFeedback :: [(Int, Int, Int)]
-testFeedback =
-        getZipList $ fmap feedback (ZipList targets) <*> (ZipList guesses)
-
--- | Combinations
-choose :: (Eq t, Num t) => t -> [a] -> [[a]]
-choose 0 _  = [[]]
-choose _ [] = []
-choose k (x:xs) = (map (x:) (choose (k-1) xs)) ++ choose k xs
-
--- all pitches:
--- [Pitch x y | x <- ['A'..'G'], y <-['1'..'3']]
-
--- feedback [A1,F1,F2] [G3,F1,D1] = (1,1,1) -- should be (1,0,1)
-
---------------------------------------------------------------------------------
-
-allPitches :: [[Pitch]]
-allPitches = choose 3 [Pitch x y | x <- ['A'..'G'], y <-['1'..'3']]
+-------------------------------------------------------------------------------
