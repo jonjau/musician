@@ -118,7 +118,8 @@ feedback target guess =
 --
 -- The `Chord` [A2, B1, C1] was one of the initial `Chord`s that resulted in a
 -- very low (around 4.21 in tests) number of guesses to guess the correct
--- `Chord`, on average over all 1330 possible target `Chord`s.
+-- `Chord`, on average, after "brute-force" checking over all 1330 possible
+-- target `Chord`s.
 initialGuess :: (Chord, GameState)
 initialGuess =
     let allPitches = [ Pitch note octave
@@ -154,15 +155,16 @@ pickBest state =
 -- This is computed by grouping guesses that would result in the same
 -- feedback score, assuming the given guess is the actual target, then
 -- summing up the products of length and relative frequency (probability)
--- of each group.
+-- of each group. This sum corresponds to the expected length of the list
+-- containing all the remaining candidates resulting from the guess. The
+-- smaller this is, the better the guess is at eliminating possibilities.
 expectedRemainingCandidates ::  GameState -> Chord -> Double
 expectedRemainingCandidates state guess =
     let 
         nPossibilities = length state
-        possibleFeedbacks = fmap (flip feedback guess) state
-        lengths = fmap length ((group . sort) possibleFeedbacks)
-        comp = \len ->
-            fromIntegral len * (fromIntegral len / fromIntegral nPossibilities)
+        possibleFeedbacks = fmap ((flip feedback) guess) state
+        lengths = fmap genericLength ((group . sort) possibleFeedbacks)
+        comp = \len -> len * (len / fromIntegral nPossibilities)
     in  sum (fmap comp lengths)
 
 -- | `combinations` returns a list of lists: each list is combination of
@@ -170,6 +172,6 @@ expectedRemainingCandidates state guess =
 combinations :: Int -> [a] -> [[a]]
 combinations 0 _  = [[]]
 combinations _ [] = []
-combinations k (x:xs) =(map (x:) (combinations (k-1) xs)) ++ combinations k xs
+combinations k (x:xs) = (map (x:) (combinations (k-1) xs)) ++ combinations k xs
 
 -------------------------------------------------------------------------------

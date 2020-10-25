@@ -8,6 +8,7 @@ import Data.List
 import Control.Applicative ( ZipList(ZipList, getZipList) )
 import Data.Maybe ( fromJust )
 import Data.Ord ( comparing )
+import Data.List
 
 help :: [Char] -> (Char, Char)
 help [a,b] = (a,b)
@@ -189,12 +190,23 @@ allChords = combinations 3 [ (fromJust . toPitch) [x,y]
                            | x <- ['A'..'G']
                            , y <-['1'..'3']]
 
+type Chorda = [Pitch]
+
+expectedRemainingCandidates' ::  GameState -> Chorda -> Double
+expectedRemainingCandidates' state guess =
+    let 
+        nPossibilities = length state
+        possibleFeedbacks = fmap ((flip feedback) guess) state
+        lengths = fmap genericLength ((group . sort) possibleFeedbacks)
+        comp = \len -> len * (len / fromIntegral nPossibilities)
+    in  sum (fmap comp lengths)
+
 -- -- expect (1/10) * 1 + (3/10) * 3 + (6/10) * 6 = 4.6
--- testERT :: Fractional a => a
--- testERT =
---     let state = testChords
---         guess = toChord "A1 B2 C3"
---     in expectedRemainingCandidates state guess
+testERT :: Double
+testERT =
+    let state = testChords
+        guess = toChord "A1 B2 C3"
+    in expectedRemainingCandidates' state guess
 
 testChords :: GameState
 testChords = [ toChord "A1 B2 C3" -- (3,0,0) correct
