@@ -160,12 +160,11 @@ pickBest state =
 -- smaller this is, the better the guess is at eliminating possibilities.
 expectedRemainingCandidates ::  GameState -> Chord -> Double
 expectedRemainingCandidates state guess =
-    let 
-        nPossibilities = length state
+    let nPossibilities = length state
         possibleFeedbacks = fmap ((flip feedback) guess) state
         lengths = fmap genericLength ((group . sort) possibleFeedbacks)
-        comp = \len -> len * (len / fromIntegral nPossibilities)
-    in  sum (fmap comp lengths)
+        component = \len -> len * (len / fromIntegral nPossibilities)
+    in  sum (fmap component lengths)
 
 -- | `combinations` returns a list of lists: each list is combination of
 -- elements in the input list; each combination is of the given length k.

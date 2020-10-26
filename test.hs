@@ -2,31 +2,20 @@
 -- Tests and experiments for Project 2
 
 import Proj2
-    ( feedback, initialGuess, nextGuess, toPitch, GameState, Pitch )
+  ( GameState,
+    Pitch,
+    feedback,
+    initialGuess,
+    nextGuess,
+    toPitch,
+  )
 import Data.List
-    ( minimumBy, (\\), delete, genericLength, intersect, union )
+    ( (\\), delete, genericLength, group, intersect, sort, union )
 import Control.Applicative ( ZipList(ZipList, getZipList) )
 import Data.Maybe ( fromJust )
-import Data.Ord ( comparing )
-import Data.List
 
-help :: [Char] -> (Char, Char)
-help [a,b] = (a,b)
-help _ = ('x','y')
-
-data Suit = Club | Diamond | Heart | Spade
-    deriving (Show, Eq, Ord)
-data Rank
-    = R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10
-    | Jack | Queen | King | Ace
-    deriving Show
-
-data Card = Card Suit Rank deriving Show
-
-type Person = String
-
-fun :: Person -> String
-fun p = p ++ " the person"
+--------------------------------------------------------------------------------
+-- DUMP
 
 -- https://blog.ramdoot.in/monadic-do-block-yet-again-a98cf0237b25
 -- https://en.wikibooks.org/wiki/Haskell/Monad_transformers
@@ -91,8 +80,6 @@ testdo = do
 onceAgain :: (Applicative f, Num b) => [f b] -> [f b] -> [f b]
 onceAgain xs ys = [pure (+) <*> x <*> y | (x,y) <- zip xs ys]
 
---------------------------------------------------------------------------------
-
 choose :: (Eq t, Num t) => t -> [a] -> [[a]]
 choose 0 _  = [[]]
 choose _ [] = []
@@ -127,25 +114,6 @@ averageNumberOfGuesses initialGuess targets =
 mysplit :: [[Pitch]] -> [([Pitch], [[Pitch]])]
 mysplit [] = []
 mysplit l@(p:ps) = (p, delete p l) : mysplit ps
-
-
-main :: IO ()
-main = do
-  -- putStr "Target chord (3 pitches separated by spaces): "
-  let allTargets = allChords
-  let allInitialGuesses = fmap (\t -> (t, allChords \\ [t])) allChords
-  let initials = [initialGuess]
-  let ys = fmap (flip averageNumberOfGuesses allTargets) initials
-  let anss = zip initials ys
-  let best = minimumBy (comparing snd) anss
-  let ((init, _), nguesses) = best
-  putStrLn $ show init
-  putStrLn $ show nguesses
-
-  -- let ans = averageNumberOfGuesses initialGuess allTargets
-
- --   let allNGuesses = fmap (guessTest' initialGuess) allTargets
---   let avgNGuesses = realToFrac (sum allNGuesses) / (genericLength allNGuesses)
 
 -- | just make guesses that are consistent, this one isn't very clever
 --  average: 4.8240601503759395
@@ -190,16 +158,14 @@ allChords = combinations 3 [ (fromJust . toPitch) [x,y]
                            | x <- ['A'..'G']
                            , y <-['1'..'3']]
 
-type Chorda = [Pitch]
-
-expectedRemainingCandidates' ::  GameState -> Chorda -> Double
+expectedRemainingCandidates' ::  GameState -> [Pitch] -> Double
 expectedRemainingCandidates' state guess =
     let 
         nPossibilities = length state
         possibleFeedbacks = fmap ((flip feedback) guess) state
-        lengths = fmap genericLength ((group . sort) possibleFeedbacks)
+        lengths = map genericLength ((group . sort) possibleFeedbacks)
         comp = \len -> len * (len / fromIntegral nPossibilities)
-    in  sum (fmap comp lengths)
+    in  sum (map comp lengths)
 
 -- -- expect (1/10) * 1 + (3/10) * 3 + (6/10) * 6 = 4.6
 testERT :: Double
@@ -223,7 +189,53 @@ testChords = [ toChord "A1 B2 C3" -- (3,0,0) correct
              , toChord "A1 B2 G3"
              ]
 
--- With A1 B2 C3:
+--------------------------------------------------------------------------------
+-- Actual testing code
+
+-- | Guess the given target, counting and showing the guesses.
+guessTest :: [Pitch] -> IO ()
+guessTest target = do
+  let (guess, other) = initialGuess
+  loop target guess other 1
+
+-- | Given a target and guess and a guess number, continue guessing
+-- until the right target is guessed.
+loop :: [Pitch] -> [Pitch] -> GameState -> Int -> IO ()
+loop target guess other guesses = do
+  putStrLn $ "Your guess #" ++ show guesses ++ ":  " ++ show guess
+  let answer = feedback target guess
+  putStrLn $ "    My answer:  " ++ show answer
+  if answer == (3, 0, 0)
+    then do
+      putStrLn $ "You got it in " ++ show guesses ++ " guesses!"
+    else do
+      let (guess', other') = nextGuess (guess, other) answer
+      loop target guess' other' (guesses + 1)
+
+-- | Prompt for a target and use guessTest to try to guess it.
+main :: IO ()
+main = do
+  putStr "Target chord (3 pitches separated by spaces): "
+  text <- getLine
+  guessTest $ toChord text
+
+-- uncomment this one to test for average performance over all the guesses:
+-- main :: IO ()
+-- main = do
+--   -- putStr "Target chord (3 pitches separated by spaces): "
+--   let allTargets = allChords
+--   let allInitialGuesses = fmap (\t -> (t, allChords \\ [t])) allChords
+--   let initials = [initialGuess]
+--   let ys = fmap (flip averageNumberOfGuesses allTargets) initials
+--   let anss = zip initials ys
+--   let best = minimumBy (comparing snd) anss
+--   let ((init, _), nguesses) = best
+--   putStrLn $ show init
+--   putStrLn $ show nguesses
+
+-------------------------------------------------------------------------------
+
+-- With initial guess A1 B2 C3:
 --
 -- Filtering inconsistent guesses:
 -- 4.8240601503759395
@@ -260,6 +272,8 @@ testChords = [ toChord "A1 B2 C3" -- (3,0,0) correct
 -- real    0m36.746s
 -- user    0m36.591s
 -- sys     0m0.120s
+
+
 
 -- A2 B1 C1
 -- Filtering impossible guesses + picking best guess + O2 compiler flag:
