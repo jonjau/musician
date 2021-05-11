@@ -17,7 +17,7 @@ that are inconsistent with previous guesses, and then choosing the guess that
 is expected to reduce the number of possibilities by the largest amount. The
 game state is used to keep track of the remaining possible guesses.
 
-This strategy, along with an close-to-optimal initial guess (A2 B1 C1, found
+This strategy, along with a close-to-optimal initial guess (A2 B1 C1, found
 after brute-force checking), resulted in around 4.21 guesses to guess the
 target, on average over the 1330 possible target chords.
 
